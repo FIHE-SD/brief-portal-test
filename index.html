@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Purchase Submission</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* Layout: a single sheet like the paper form, four numbered blocks in a 2x2 grid, a sticky status bar at the bottom */
+:root {
+  --bg: #f3f3f1;
+  --sheet: #ffffff;
+  --fg: #1b1c1e;
+  --muted: #6b6d70;
+  --line: #dcdcd8;
+  --field: #f8f8f6;
+  --accent: #1b1c1e;
+  --accent-fg: #ffffff;
+  --ok: #2f7a4d;
+  --warn: #b4441f;
+  --warn-bg: #fbece6;
+  --font-body: "Hanken Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121315; --sheet: #1b1c1f; --fg: #ececea; --muted: #9a9c9f; --line: #34363a;
+    --field: #232428; --accent: #ececea; --accent-fg: #121315; --ok: #6cc08f; --warn: #f08a63; --warn-bg: #3a2119;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121315; --sheet: #1b1c1f; --fg: #ececea; --muted: #9a9c9f; --line: #34363a;
+  --field: #232428; --accent: #ececea; --accent-fg: #121315; --ok: #6cc08f; --warn: #f08a63; --warn-bg: #3a2119;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 32px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet { background: var(--sheet); border: 1px solid var(--line); border-radius: 4px; padding: clamp(20px, 4vw, 48px); }
+header.top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-start; border-bottom: 1px solid var(--line); padding-bottom: 24px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 600; letter-spacing: -.01em; margin: 0; text-wrap: balance; }
+.lead { color: var(--muted); margin: 8px 0 0; max-width: 60ch; }
+.meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); text-align: right; display: grid; gap: 2px; }
+.meta b { color: var(--fg); font-weight: 500; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px 48px; margin-top: 32px; }
+@media (max-width: 720px) { .grid { grid-template-columns: 1fr; gap: 32px; } .meta { text-align: left; } }
+section.block { min-width: 0; display: grid; gap: 18px; align-content: start; }
+.block h2 { display: flex; gap: 12px; align-items: baseline; font-size: 18px; font-weight: 600; margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--fg); }
+.block h2 .n { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--muted); }
+.field { display: grid; gap: 6px; }
+label.lbl { font-weight: 600; font-size: 14px; }
+label.lbl .opt { font-weight: 400; color: var(--muted); }
+.hint { font-size: 13px; color: var(--muted); margin: -2px 0 0; }
+input[type=text], input[type=number], input[type=date], select, textarea {
+  font: inherit; color: var(--fg); background: var(--field); border: 1px solid var(--line); border-radius: 3px;
+  padding: 10px 12px; width: 100%; min-width: 0;
+}
+textarea { min-height: 120px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.money { position: relative; }
+.money span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-family: var(--font-mono); }
+.money input { padding-left: 30px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.check input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--fg); }
+.field.bad input, .field.bad select, .field.bad textarea { border-color: var(--warn); background: var(--warn-bg); }
+.err { color: var(--warn); font-size: 13px; margin: 0; }
+.note { font-size: 13px; background: var(--field); border: 1px solid var(--line); border-radius: 3px; padding: 10px 12px; margin: 0; }
+.note b { font-family: var(--font-mono); font-weight: 500; }
+.send { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 28px; display: grid; gap: 16px; }
+.send h2 { font-size: 18px; margin: 0; display: flex; gap: 12px; align-items: baseline; }
+.send h2 .n { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--muted); }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.step { border: 1px solid var(--line); border-radius: 3px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.step p { margin: 0; font-size: 14px; color: var(--muted); }
+.step strong { font-size: 15px; }
+.mail { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-family: var(--font-mono); font-size: 14px; }
+button, .btn { font: inherit; font-weight: 600; border-radius: 3px; padding: 10px 16px; cursor: pointer; border: 1px solid var(--fg); background: transparent; color: var(--fg); text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:disabled, .btn[aria-disabled=true] { opacity: .4; cursor: not-allowed; }
+button.small { padding: 4px 10px; font-size: 13px; }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--sheet); border-top: 1px solid var(--line); padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); z-index: 5; }
+.bar .in { max-width: 980px; margin: 0 auto; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+.prog { display: flex; gap: 12px; align-items: center; font-size: 14px; }
+.meter { width: 120px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--ok); width: 0; transition: width .2s; }
+.saved { color: var(--muted); font-size: 13px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.confirm { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.msg { font-size: 14px; margin: 0; }
+.reopen { margin-top: 24px; border: 1px dashed var(--line); border-radius: 3px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; transition: background .15s, border-color .15s; }
+.reopen.over { border-color: var(--fg); background: var(--field); }
+.reopen p { margin: 0; font-size: 14px; }
+.reopen .t { font-weight: 600; }
+.reopen .s { color: var(--muted); }
+.reopen input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.editing { font-family: var(--font-mono); font-size: 12px; color: var(--ok); }
+.msg.ok { color: var(--ok); }
+.msg.bad { color: var(--warn); }
+@media (prefers-reduced-motion: reduce) { .meter i { transition: none; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <form class="sheet" id="form" novalidate>
+    <header class="top">
+      <div>
+        <p class="eyebrow">Store Development Team</p>
+        <h1>Purchase submission</h1>
+        <p class="lead">Everything needed for an approved purchase request, in review order. All amounts are in euros (€).</p>
+      </div>
+      <div class="meta">
+        <span>Form version <b id="ver"></b></span>
+        <span>Today's date <b id="today"></b></span>
+        <span class="editing" id="editing" hidden></span>
+      </div>
+    </header>
+
+    <div class="reopen" id="reopen">
+      <div>
+        <p class="t">Changing a request you already sent?</p>
+        <p class="s">Drop its PDF here and the form fills in again. Then edit and create a new PDF.</p>
+        <p class="msg" id="reopenMsg" role="status"></p>
+      </div>
+      <label class="btn" for="pdfIn">Open PDF<input type="file" id="pdfIn" accept="application/pdf,.pdf"></label>
+    </div>
+
+    <div class="grid">
+      <section class="block">
+        <h2><span class="n">01</span>Task</h2>
+        <div class="field" data-req="desc">
+          <label class="lbl" for="desc">PO description</label>
+          <p class="hint">What needs to be purchased. This text goes into the PO.</p>
+          <textarea id="desc" name="desc" placeholder="e.g. 2 × display plinths in light oak for the Copenhagen flagship uplift, incl. delivery"></textarea>
+        </div>
+        <div class="field" data-req="quote">
+          <label class="check" for="quote"><input type="checkbox" id="quote" name="quote"> <span>I have the quote or offer from the supplier and will send it with this request.</span></label>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2><span class="n">02</span>Accounting</h2>
+        <div class="field" data-req="gl">
+          <label class="lbl" for="gl">GL account no.</label>
+          <p class="hint">Can be provided by your controller.</p>
+          <select id="gl" name="gl">
+            <option value="">Select…</option>
+            <option value="64141">64141 · Retail</option>
+            <option value="71301">71301 · Prototype</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="text" id="glOther" name="glOther" placeholder="GL account no." hidden>
+        </div>
+        <div class="field" data-req="cc">
+          <label class="lbl" for="cc">Cost center</label>
+          <input type="text" id="cc" name="cc" inputmode="numeric" value="8009">
+          <p class="hint">8009 is Store Development.</p>
+        </div>
+        <div class="field">
+          <label class="lbl" for="order">Order no. <span class="opt">(if applicable)</span></label>
+          <input type="text" id="order" name="order">
+        </div>
+        <div class="field" data-req="org">
+          <label class="lbl" for="org">Organisation</label>
+          <select id="org" name="org">
+            <option value="">Select…</option>
+            <option value="0001">0001 · Operations a/s</option>
+            <option value="0101">0101 · B&amp;O Danmark</option>
+            <option value="0360">0360 · US organisation</option>
+            <option value="0362">0362 · US organisation</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2><span class="n">03</span>Details</h2>
+        <div class="field" data-req="amount">
+          <label class="lbl" for="amount">Amount</label>
+          <p class="hint">Total cost to be added on the PO.</p>
+          <div class="money"><span>€</span><input type="number" id="amount" name="amount" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+        </div>
+        <div class="field" data-req="delivery">
+          <label class="lbl" for="delivery">Estimated delivery date</label>
+          <p class="hint">So the goods receipt can be done.</p>
+          <input type="date" id="delivery" name="delivery">
+        </div>
+      </section>
+
+      <section class="block">
+        <h2><span class="n">04</span>Approval</h2>
+        <div class="field" data-req="approver">
+          <label class="lbl" for="approver">Approved by</label>
+          <p class="hint">Manager or owner of the organisation.</p>
+          <input type="text" id="approver" name="approver">
+        </div>
+        <p class="note" id="approverNote" hidden></p>
+      </section>
+    </div>
+
+    <section class="send">
+      <h2><span class="n">05</span>Send</h2>
+      <div class="steps">
+        <div class="step">
+          <strong>1. Create the PDF</strong>
+          <p>Checks that nothing is missing, then saves a dated PDF of this request.</p>
+          <div><button type="submit" class="primary" id="make">Check and create PDF</button></div>
+          <p class="msg" id="makeMsg" role="status"></p>
+        </div>
+        <div class="step">
+          <strong>2. Send it with the quote</strong>
+          <p>E-mail the PDF and the supplier's quote to:</p>
+          <div class="mail"><span id="mailAddr">amc@bang-olufsen.dk</span><button type="button" class="small" id="copyMail">Copy address</button></div>
+          <p>Use this subject line:</p>
+          <div class="mail"><span id="mailSubj">Purchase submission</span><button type="button" class="small" id="copySubj">Copy subject</button></div>
+          <div id="uploadWrap" hidden><p>Or upload both files here:</p><a class="btn" id="uploadLink" target="_blank" rel="noopener">Upload to SharePoint</a></div>
+        </div>
+      </div>
+      <p class="hint">Reference: cost center Store Development 8009 · GL Retail 64141, Prototype 71301 · Operations a/s 0001 (approver CHAL/KEOL) · B&amp;O Danmark 0101 (approver MAEN) · US org 0360/0362.</p>
+    </section>
+  </form>
+</div>
+
+<div class="bar">
+  <div class="in">
+    <div class="prog"><div class="meter"><i id="meterFill"></i></div><span id="progText"></span><span class="saved" id="saved"></span></div>
+    <div class="actions"><button type="button" id="clear">Clear form</button><div class="confirm" id="confirmClear" hidden><span>Clear every answer?</span><button type="button" id="yesClear">Clear</button><button type="button" id="noClear">Keep</button></div></div>
+  </div>
+</div>
+
+<script>
+// Change these two values when the form changes or the upload folder moves.
+const FORM_VERSION = "Oct 2026 · v1";
+const FILE_REQUEST_URL = ""; // SharePoint / OneDrive "Request files" link
+
+const FORM_ID = "purchase-submission";
+const DATA_TAG = "BRIEFDATA:";
+const STORE_KEY = "purchase-submission-draft";
+let created = "";  // date the request was first submitted, kept when a PDF is reopened
+const APPROVERS = { "0001": "CHAL / KEOL", "0101": "MAEN" };
+const REQUIRED = {
+  desc: () => val("desc").length > 0 || "Describe what needs to be purchased.",
+  quote: () => $("quote").checked || "The quote or offer must be sent with the request.",
+  gl: () => !!(val("gl") && (val("gl") !== "other" || val("glOther"))) || "Choose a GL account, or enter one under Other.",
+  cc: () => val("cc").length > 0 || "Enter the cost center.",
+  org: () => val("org").length > 0 || "Choose the organisation.",
+  amount: () => Number(val("amount")) > 0 || "Enter the total amount in euros.",
+  delivery: () => val("delivery").length > 0 || "Enter the estimated delivery date.",
+  approver: () => val("approver").length > 0 || "Enter who approved the purchase."
+};
+
+function $(id) { return document.getElementById(id); }
+function val(id) { const el = $(id); return el ? String(el.value).trim() : ""; }
+const todayISO = new Date().toISOString().slice(0, 10);
+function fmtDate(iso) { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; }
+function fmtEUR(n) { return Number(n).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+$("ver").textContent = FORM_VERSION;
+$("today").textContent = fmtDate(todayISO);
+if (FILE_REQUEST_URL) { $("uploadWrap").hidden = false; $("uploadLink").href = FILE_REQUEST_URL; }
+
+const form = $("form");
+const fields = ["desc", "quote", "gl", "glOther", "cc", "order", "org", "amount", "delivery", "approver"];
+
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
+    if (!d) return;
+    applyData(d);
+    $("saved").textContent = "Draft restored";
+  } catch (e) {}
+}
+function collect() {
+  const d = { created };
+  fields.forEach(f => d[f] = $(f).type === "checkbox" ? $(f).checked : $(f).value);
+  return d;
+}
+function applyData(d) {
+  fields.forEach(f => { if (!(f in d)) return; if ($(f).type === "checkbox") $(f).checked = !!d[f]; else $(f).value = d[f]; });
+  created = d.created || "";
+  $("editing").hidden = !created;
+  $("editing").textContent = created ? `Editing request from ${fmtDate(created)}` : "";
+}
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(collect()));
+    $("saved").textContent = "Draft saved in this browser";
+  } catch (e) { $("saved").textContent = ""; }
+}
+
+function syncUI() {
+  $("glOther").hidden = val("gl") !== "other";
+  const a = APPROVERS[val("org")];
+  const note = $("approverNote");
+  if (a) { note.hidden = false; note.innerHTML = ""; note.append("Approver for this organisation: "); const b = document.createElement("b"); b.textContent = a; note.append(b); }
+  else if (val("org")) { note.hidden = false; note.textContent = "US organisations: enter the manager or owner who approved."; }
+  else note.hidden = true;
+  const keys = Object.keys(REQUIRED);
+  const done = keys.filter(k => REQUIRED[k]() === true).length;
+  $("meterFill").style.width = (done / keys.length * 100) + "%";
+  $("progText").textContent = `${done} of ${keys.length} required answers`;
+}
+
+function clearErrors(key) {
+  const box = form.querySelector(`[data-req="${key}"]`);
+  if (!box) return;
+  box.classList.remove("bad");
+  box.querySelector(".err")?.remove();
+}
+function validate() {
+  let first = null;
+  for (const [key, test] of Object.entries(REQUIRED)) {
+    clearErrors(key);
+    const r = test();
+    if (r !== true) {
+      const box = form.querySelector(`[data-req="${key}"]`);
+      box.classList.add("bad");
+      const p = document.createElement("p"); p.className = "err"; p.textContent = r; box.append(p);
+      if (!first) first = box;
+    }
+  }
+  if (first) { first.scrollIntoView({ behavior: "smooth", block: "center" }); first.querySelector("input,select,textarea")?.focus({ preventScroll: true }); }
+  return !first;
+}
+
+form.addEventListener("input", e => {
+  const box = e.target.closest("[data-req]"); if (box) clearErrors(box.dataset.req);
+  syncUI(); save();
+});
+form.addEventListener("change", () => { syncUI(); save(); });
+
+function buildPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const L = 20, W = 170;
+  let y = 22;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(110);
+  doc.text("STORE DEVELOPMENT TEAM", L, y);
+  const first = created && created !== todayISO ? `   |   First submitted ${fmtDate(created)}` : "";
+  doc.text(`Form version ${FORM_VERSION.replace("·", "-")}   |   Date ${fmtDate(todayISO)}${first}`, L + W, y, { align: "right" });
+  const payload = { form: FORM_ID, version: FORM_VERSION, saved: todayISO, data: { ...collect(), created: created || todayISO } };
+  doc.setProperties({ title: "Purchase submission", subject: DATA_TAG + btoa(unescape(encodeURIComponent(JSON.stringify(payload)))) });
+  y += 10; doc.setTextColor(20); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
+  doc.text("Purchase submission", L, y);
+  y += 6; doc.setDrawColor(20); doc.setLineWidth(0.4); doc.line(L, y, L + W, y); y += 10;
+
+  const glText = val("gl") === "other" ? val("glOther") : $("gl").selectedOptions[0].textContent.replace("·", "-");
+  const sections = [
+    ["01 Task", [["PO description", val("desc")], ["Quote / offer", "Sent with this request"]]],
+    ["02 Accounting", [["GL account no.", glText], ["Cost center", val("cc")], ["Order no.", val("order") || "-"], ["Organisation", $("org").selectedOptions[0].textContent.replace("·", "-")]]],
+    ["03 Details", [["Amount", "EUR " + fmtEUR(val("amount"))], ["Est. delivery date", fmtDate(val("delivery"))]]],
+    ["04 Approval", [["Approved by", val("approver")]]]
+  ];
+  for (const [title, rows] of sections) {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(title, L, y);
+    y += 2; doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(L, y, L + W, y); y += 6;
+    doc.setFontSize(10);
+    for (const [k, v] of rows) {
+      doc.setFont("helvetica", "bold"); doc.setTextColor(90); doc.text(k, L, y);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(20);
+      const lines = doc.splitTextToSize(v, W - 50);
+      doc.text(lines, L + 50, y);
+      y += Math.max(1, lines.length) * 5 + 3;
+    }
+    y += 5;
+  }
+  doc.setFontSize(9); doc.setTextColor(110);
+  doc.text("Send this PDF and the supplier's quote to amc@bang-olufsen.dk", L, 280);
+  doc.text("To change this request later, open the form and drop this PDF onto it.", L, 285);
+  return doc;
+}
+
+async function offerFile(blob, filename) {
+  try {
+    const dl = await window.claude?.use?.("downloads");
+    if (dl) { await dl.save({ filename, data: blob }); return "saved"; }
+  } catch (e) {
+    if (e && e.code === "declined") return "declined";
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return "saved";
+}
+
+form.addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = $("makeMsg");
+  msg.className = "msg"; msg.textContent = "";
+  if (!validate()) { msg.className = "msg bad"; msg.textContent = "Some answers are missing. They are marked above."; return; }
+  if (!window.jspdf) { msg.className = "msg bad"; msg.textContent = "The PDF tool did not load. Check your connection and reload the page."; return; }
+  const doc = buildPDF();
+  const safe = val("desc").slice(0, 30).replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "request";
+  const name = `Purchase-submission_${todayISO}_${safe}.pdf`;
+  const r = await offerFile(doc.output("blob"), name);
+  if (r === "declined") { msg.textContent = "PDF not saved. Select the button again when you're ready."; return; }
+  msg.className = "msg ok"; msg.textContent = `PDF created: ${name}. Now send it with the quote (step 2).`;
+});
+
+function copyBtn(btnId, spanId) {
+  $(btnId).addEventListener("click", () => {
+    const t = $(spanId).textContent, label = $(btnId).textContent;
+    const done = () => { $(btnId).textContent = "Copied"; setTimeout(() => { $(btnId).textContent = label; }, 1500); };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents($(spanId)); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(t).then(done, fallback); } catch (e) { fallback(); }
+  });
+}
+copyBtn("copyMail", "mailAddr");
+copyBtn("copySubj", "mailSubj");
+function syncSubject() {
+  const d = val("desc").split(/\r?\n/)[0].slice(0, 60).trim();
+  $("mailSubj").textContent = d ? `Purchase submission – ${d}` : "Purchase submission";
+}
+form.addEventListener("input", syncSubject);
+
+$("clear").addEventListener("click", () => { $("clear").hidden = true; $("confirmClear").hidden = false; });
+$("noClear").addEventListener("click", () => { $("clear").hidden = false; $("confirmClear").hidden = true; });
+$("yesClear").addEventListener("click", () => {
+  form.reset(); $("cc").value = "8009"; applyData({}); $("reopenMsg").textContent = "";
+  try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+  Object.keys(REQUIRED).forEach(clearErrors);
+  $("makeMsg").textContent = ""; $("saved").textContent = "Form cleared";
+  $("clear").hidden = false; $("confirmClear").hidden = true;
+  syncUI();
+});
+
+function readBriefPDF(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject("That file could not be read.");
+    r.onload = () => {
+      const bytes = new Uint8Array(r.result);
+      let text = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      const m = text.match(/BRIEFDATA:([A-Za-z0-9+\/=]+)/);
+      if (!m) return reject("This PDF wasn't made with this form, so it can't be reopened. Use the PDF the form created.");
+      try {
+        const p = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+        if (p.form !== FORM_ID) return reject("This PDF belongs to a different brief. Open it on that brief's page.");
+        resolve(p);
+      } catch (e) { reject("The answers in this PDF could not be read."); }
+    };
+    r.readAsArrayBuffer(file);
+  });
+}
+async function reopen(file) {
+  const msg = $("reopenMsg");
+  msg.className = "msg"; msg.textContent = "";
+  if (!file) return;
+  try {
+    const p = await readBriefPDF(file);
+    form.reset();
+    applyData(p.data);
+    Object.keys(REQUIRED).forEach(clearErrors);
+    syncUI(); save(); syncSubject();
+    msg.className = "msg ok";
+    msg.textContent = `Answers loaded from the PDF saved ${fmtDate(p.saved)}` + (p.version !== FORM_VERSION ? `. The form has been updated since then, so check every section.` : ". Make your changes, then create a new PDF.");
+  } catch (err) { msg.className = "msg bad"; msg.textContent = String(err); }
+}
+$("pdfIn").addEventListener("change", e => { reopen(e.target.files[0]); e.target.value = ""; });
+const zone = $("reopen");
+["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); zone.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || !e.relatedTarget) zone.classList.remove("over"); }));
+document.addEventListener("drop", e => { const f = e.dataTransfer?.files?.[0]; if (f) reopen(f); });
+
+load(); syncUI(); syncSubject();
+</script>
+
+</body>
+</html>
